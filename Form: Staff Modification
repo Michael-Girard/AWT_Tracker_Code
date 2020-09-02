@@ -1,0 +1,197 @@
+Option Compare Database
+
+Public currentStaff As Recordset
+Public modifying As Boolean
+
+Private Sub btnNavPrevious_Click()
+    modifying = True
+    
+    'Move to the previous record in the Disabilities Recordset
+    currentStaff.MovePrevious
+    
+    'Update the record number caption
+    Me.lblRecord.Caption = "Record " & currentStaff.AbsolutePosition + 1 & " of " & currentStaff.RecordCount
+        
+    'If this is the first record, make the previous button invisible
+    If currentStaff.AbsolutePosition = 0 Then
+        Me.tfStaffName.SetFocus
+        Me.btnNavPrevious.Visible = False
+    End If
+    
+    'Turn the next button visible
+    If currentStaff.AbsolutePosition + 1 < currentStaff.RecordCount Then
+        Me.btnNavNext.Visible = True
+    End If
+
+    PopulateInformation
+End Sub
+
+Private Sub btnNavNext_Click()
+    modifying = True
+    'Move to the next record in the Disabilities Recordset
+    currentStaff.MoveNext
+    
+    'Update the record number caption
+    Me.lblRecord.Caption = "Record " & currentStaff.AbsolutePosition + 1 & " of " & currentStaff.RecordCount
+    
+    'If this is the last record, turn the next button invisible
+    If currentStaff.AbsolutePosition + 1 = currentStaff.RecordCount Then
+        Me.tfStaffName.SetFocus
+        Me.btnNavNext.Visible = False
+    End If
+            
+    'Make the Previous button visible
+    If currentStaff.AbsolutePosition > 0 Then
+        Me.btnNavPrevious.Visible = True
+    End If
+    
+    PopulateInformation
+End Sub
+
+Private Sub btnNavNew_Click()
+    If modifying Then
+        modifying = False
+        ClearInformation
+    
+        'Set the disability selected to the end
+        currentStaff.Move currentStaff.RecordCount
+    
+        'Change visibility of the buttons
+        Me.tfStaffName.SetFocus
+        Me.btnNavPrevious.Visible = True
+        Me.btnNavNext.Visible = False
+    
+        'Update the record number caption
+        Me.lblRecord.Caption = "Record " & currentStaff.RecordCount + 1 & " of " & currentStaff.RecordCount + 1
+    End If
+End Sub
+
+Private Sub chklblCurrent_Click()
+    Dim checked As Boolean
+    checked = Me.chklblCurrent.Caption = "þ"
+    Me.chklblCurrent.Caption = IIf(checked, "o", "þ")
+End Sub
+
+Private Sub Form_Load()
+    'Declare variables to look up this client's disabilities
+    Dim database As database
+    Set database = CurrentDb()
+    Dim querySql As String
+    
+    'Set SELECT query to gather the currentStaff
+    querySql = "SELECT Staff.ID, Staff.Staff_Name, ValidStaffPositions.Position_Name, Offices.Office_Name, Staff.Current " _
+        & "FROM (Staff LEFT JOIN ValidStaffPositions ON Staff.Position_Name = ValidStaffPositions.ID) " _
+        & "LEFT JOIN Offices ON Staff.Office_Name = Offices.ID ORDER BY Staff.Staff_Name"
+
+    'Run query
+    Set currentStaff = database.OpenRecordset(querySql)
+    
+    If currentStaff.EOF Then
+        'If there are no staff recorded, leave fields blank and disable buttons to indicate no staff
+        modifying = False
+        Me.btnNavNext.Visible = False
+    Else
+        'If there are any staff recorded, display the first one
+        modifying = True
+        PopulateInformation
+        
+        'Check the number of records left
+        currentStaff.MoveLast
+        currentStaff.MoveFirst
+        
+        'Update the record number caption
+        Me.lblRecord.Caption = "Record " & currentStaff.AbsolutePosition + 1 & " of " & currentStaff.RecordCount
+        
+        'If this is the last record, turn the next button invisible
+        If currentStaff.AbsolutePosition + 1 = currentStaff.RecordCount Then
+            Me.tfStaffName.SetFocus
+            Me.btnNavNext.Visible = False
+        End If
+    End If
+End Sub
+
+Private Sub ClearInformation()
+    'Clear information in the fields
+    Me.tfStaffName = ""
+    Me.cbPositionName = ""
+    Me.cbOffice = ""
+    Me.chklblCurrent.Caption = "þ"
+End Sub
+
+Private Sub PopulateInformation()
+    'Populate information to the fields from the RecordSet
+    Me.tfStaffName = currentStaff!Staff_Name
+    Me.cbPositionName = currentStaff!Position_Name
+    Me.cbOffice = currentStaff!Office_Name
+    Me.chklblCurrent.Caption = IIf(currentStaff!Current, "þ", "o")
+End Sub
+
+Private Sub btnBack_Click()
+    If (CurrentProject.AllForms("Data Entry Navform").IsLoaded) Then
+        Forms![Data Entry Navform].NavigationSubform.Form.cbReferrer.Requery
+    End If
+    DoCmd.Close acForm, "Staff Modification Form", acSavePrompt
+End Sub
+
+Private Sub btnSave_Click()
+    'Declare Variables
+    Dim database As database
+    Set database = CurrentDb()
+    Dim records As Recordset
+    Dim querySql As String
+    
+    'Identify the information for the new equipment
+    Dim newStaffName As String
+    Dim newPositionID As Integer
+    Dim newOfficeID As Integer
+    Dim newCurrent As Boolean
+        
+    'Get the IDs for the Position Name and Office Name
+    querySql = "SELECT ValidStaffPositions.ID " _
+       & "FROM ValidStaffPositions " _
+       & "WHERE Position_Name = '" & Me.cbPositionName.Value & "';"
+    newPositionID = database.OpenRecordset(querySql)!ID
+    
+    querySql = "SELECT Offices.ID " _
+       & "FROM Offices " _
+       & "WHERE Office_Name = '" & Me.cbOffice.Value & "';"
+    newOfficeID = database.OpenRecordset(querySql)!ID
+    
+    newStaffName = Me.tfStaffName.Value
+    newCurrent = IIf(Me.chklblCurrent.Caption = "o", False, True)
+    
+    'First check if data is being entered or modified
+    If modifying Then
+        'Modify the value in the table
+        querySql = "UPDATE Staff " _
+           & "SET Staff_Name = '" & newStaffName & "', " _
+           & "Position_Name = " & newPositionID & ", " _
+           & "Office_Name = " & newOfficeID & ", " _
+           & "Current = " & newCurrent & " " _
+           & "WHERE ID = " & currentStaff!ID & ";"
+        database.Execute querySql, dbFailOnError
+        MsgBox "Staff Member Successfully Modified"
+        
+        'Requery the database to get updated information, then move the position back to what it was previously
+        Dim currentIndex As Long
+        currentIndex = currentStaff.AbsolutePosition
+        currentStaff.Requery
+        currentStaff.MoveLast
+        currentStaff.AbsolutePosition = currentIndex
+    Else
+        'Perform an insert query
+        querySql = "INSERT INTO Staff (Staff_Name, Position_Name, Office_Name, Current) VALUES ('" _
+            & newStaffName & "', " _
+            & newPositionID & ", " _
+            & newOfficeID & ", " _
+            & newCurrent & ");"
+        database.Execute querySql, dbFailOnError
+        MsgBox "Staff Member Successfully Added"
+        
+        'Requery the database to get updated information, then move to the last index to allow seamless traversal of the new information
+        currentStaff.Requery
+        currentStaff.MoveLast
+        modifying = True
+        Me.lblRecord.Caption = "Record " & currentStaff.AbsolutePosition + 1 & " of " & currentStaff.RecordCount
+    End If
+End Sub
