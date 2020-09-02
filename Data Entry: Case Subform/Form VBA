@@ -1,0 +1,172 @@
+Option Compare Database
+
+Public modifying As Boolean
+
+Private Sub btnNewCase_Click()
+    If modifying Then
+        modifying = False
+        Me.cbOfficeName = ""
+        Me.cbReferrer = ""
+        Me.cbClientStatus = ""
+        Me.cbPositionAssigned = ""
+        Me.chklblCaseClosed.Caption = "o"
+        Me.tfReceivedDate = ""
+        Me.tfPositionAssignedDate = ""
+        Me.tfAppointmentGiven = ""
+        Me.tfAssessmentDate = ""
+        Me.tfReportUploaded = ""
+        Me.tfEquipmentArrival = ""
+        Me.tfEquipmentDelivery = ""
+        Me.tfCaseComments = ""
+    
+        'Set the disability selected to the end
+        GlobalVariables.currentCases.Move GlobalVariables.currentCases.RecordCount
+    
+        'Change visibility of the buttons
+        Me.cbOfficeName.SetFocus
+        Me.btnPreviousCase.Visible = True
+        Me.btnNextCase.Visible = False
+    
+        'Update the record number caption
+        Me.lblRecord.Caption = "Record " & GlobalVariables.currentCases.RecordCount + 1 & " of " & GlobalVariables.currentCases.RecordCount + 1
+    End If
+End Sub
+
+Private Sub btnNextCase_Click()
+    modifying = True
+    'Move to the next record in the Disabilities Recordset
+    GlobalVariables.currentCases.MoveNext
+    
+    'Update the record number caption
+    Me.lblRecord.Caption = "Record " & GlobalVariables.currentCases.AbsolutePosition + 1 & " of " & GlobalVariables.currentCases.RecordCount
+    
+    'If this is the last record, turn the next button invisible
+    If GlobalVariables.currentCases.AbsolutePosition + 1 = GlobalVariables.currentCases.RecordCount Then
+        Me.cbOfficeName.SetFocus
+        Me.btnNextCase.Visible = False
+    End If
+            
+    'Make the Previous button visible
+    If GlobalVariables.currentCases.AbsolutePosition > 0 Then
+        Me.btnPreviousCase.Visible = True
+    End If
+    
+    PopulateData
+End Sub
+
+Private Sub btnPreviousCase_Click()
+    modifying = True
+    
+    'Move to the previous record in the Disabilities Recordset
+    GlobalVariables.currentCases.MovePrevious
+    
+    'Update the record number caption
+    Me.lblRecord.Caption = "Record " & GlobalVariables.currentCases.AbsolutePosition + 1 & " of " & GlobalVariables.currentCases.RecordCount
+        
+    'If this is the first record, make the previous button invisible
+    If GlobalVariables.currentCases.AbsolutePosition = 0 Then
+        Me.cbOfficeName.SetFocus
+        Me.btnPreviousCase.Visible = False
+    End If
+    
+    'Turn the next button visible
+    If GlobalVariables.currentCases.AbsolutePosition + 1 < GlobalVariables.currentCases.RecordCount Then
+        Me.btnNextCase.Visible = True
+    End If
+
+    PopulateData
+End Sub
+
+Private Sub chklblCaseClosed_Click()
+    Dim checked As Boolean
+    checked = Me.chklblCaseClosed.Caption = "þ"
+    
+    If Not checked Then
+        Me.chklblCaseClosed.Caption = "þ"
+    Else
+        Me.chklblCaseClosed.Caption = "o"
+    End If
+End Sub
+
+Private Sub Form_Load()
+    'Declare and set variables for the client's name and participant ID
+    Dim clientName As String
+    Dim participantID As String
+    clientName = GlobalVariables.currentClient!First_Name & " " & GlobalVariables.currentClient!Last_Name
+    participantID = GlobalVariables.currentClient!Participant_ID
+    
+    'Set the client name and participant ID on the subform
+    Me.tfClientName = clientName
+    Me.tfParticipantID = participantID
+    
+    'Declare variables to look up this client's disabilities
+    Dim database As DAO.database
+    Set database = CurrentDb()
+    Dim results As DAO.Recordset
+    Dim qDef As DAO.QueryDef
+    Set qDef = database.CreateQueryDef("")
+    
+    'Assign the SQL for the query
+    qDef.SQL = "SELECT Offices.Office_Name, Staff.Staff_Name , ValidClientStatuses.Status_Name AS ClientStatusName, ValidStaffPositions.Position_Name, Cases.Referral_Received_Date,  " _
+            & "Cases.Position_Assigned_Date, Cases.Appointment_Given_Date, Cases.Assessment_Date, Cases.Report_Upload_Date, Cases.Equipment_Arrival_Date, Cases.Equipment_Delivery_Date, " _
+            & "Cases.Comments, Cases.Case_Closed, Cases.ID " _
+        & "FROM ((((Cases LEFT JOIN Clients ON Cases.Participant_ID = Clients.ID) LEFT JOIN Offices ON Cases.Office_Name = Offices.ID) " _
+            & "LEFT JOIN Staff ON Cases.Referring_Staff_Name = Staff.ID) LEFT JOIN ValidClientStatuses ON Cases.Client_Status = ValidClientStatuses.ID) " _
+            & "LEFT JOIN ValidStaffPositions ON Cases.Position_Assigned = ValidStaffPositions.ID " _
+            & "WHERE Clients.Participant_ID = [Param1];"
+    
+    qDef.Parameters("Param1").Value = participantID
+    
+    'Run the query
+    Set GlobalVariables.currentCases = qDef.OpenRecordset
+    
+    Me.btnPreviousCase.Visible = False
+    If GlobalVariables.currentCases.EOF Then
+        'If there are no disabilities recorded, leave fields blank and disable buttons to indicate no disabilities
+        modifying = False
+        Me.btnNextCase.Visible = False
+    Else
+        'If there are any disabilities recorded, display the first one
+        Me.btnNextCase.Visible = True
+        modifying = True
+        PopulateData
+        
+        'Check the number of records left
+        GlobalVariables.currentCases.MoveLast
+        GlobalVariables.currentCases.MoveFirst
+        
+        'Update the record number caption
+        Me.lblRecord.Caption = "Record " & GlobalVariables.currentCases.AbsolutePosition + 1 & " of " & GlobalVariables.currentCases.RecordCount
+        
+        'If this is the last record, turn the next button invisible
+        If GlobalVariables.currentCases.AbsolutePosition + 1 = GlobalVariables.currentCases.RecordCount Then
+            Me.cbOfficeName.SetFocus
+            Me.btnNextCase.Visible = False
+        End If
+    End If
+End Sub
+
+Private Sub PopulateData()
+    Me.cbOfficeName = GlobalVariables.currentCases!Office_Name
+    Me.cbReferrer = GlobalVariables.currentCases!Staff_Name
+    Me.cbClientStatus = GlobalVariables.currentCases!ClientStatusName
+    Me.cbPositionAssigned = GlobalVariables.currentCases!Position_Name
+    Me.chklblCaseClosed.Caption = IIf(GlobalVariables.currentCases!Case_Closed, "þ", "o")
+    Me.tfReceivedDate = GlobalVariables.currentCases!Referral_Received_Date
+    Me.tfPositionAssignedDate = GlobalVariables.currentCases!Position_Assigned_Date
+    Me.tfAppointmentGiven = GlobalVariables.currentCases!Appointment_Given_Date
+    Me.tfAssessmentDate = GlobalVariables.currentCases!Assessment_Date
+    Me.tfReportUploaded = GlobalVariables.currentCases!Report_Upload_Date
+    Me.tfEquipmentArrival = GlobalVariables.currentCases!Equipment_Arrival_Date
+    Me.tfEquipmentDelivery = GlobalVariables.currentCases!Equipment_Delivery_Date
+    Me.tfCaseComments = GlobalVariables.currentCases!comments
+    Me.Parent.currentCaseID = GlobalVariables.currentCases!ID
+End Sub
+
+Private Sub DisableFields()
+    'This subroutine disables all of the fields. Used when a case is closed.
+End Sub
+
+Private Sub EnableFields()
+    'This subroutine enables all of the fields. Used when a case is open.
+End Sub
