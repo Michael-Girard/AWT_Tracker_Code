@@ -1,0 +1,92 @@
+Option Compare Database
+
+Function GetLastActivity(ParamArray strings() As Variant) As Date
+    'Function takes a set of dates and returns the most recent date
+
+    Dim maxDate As Date
+    Dim currentDate As Date
+      
+    For Each myString In strings
+       If Not IsNull(myString) Then
+         currentDate = CDate(myString)
+         If maxDate = Empty Or maxDate < currentDate Then
+            maxDate = currentDate
+         End If
+       End If
+     Next
+     
+     GetLastActivity = maxDate
+End Function
+
+Function LookupClient(lookupValue As String, Optional lookupCriteria As String) As Boolean
+    'Function looks up a client based on a type of criteria and a value
+    'Set variables for the database operations
+    Dim database As DAO.database
+    Set database = CurrentDb()
+    Dim results As DAO.Recordset
+    Dim qDef As DAO.QueryDef
+    Set qDef = database.CreateQueryDef("")
+
+    'Define the first part of the SQL query
+    qDef.SQL = "SELECT Clients.ID, Clients.Participant_ID, Clients.First_Name, Clients.Last_Name, Clients.Address, " _
+        & "ValidCities.City_Name, Clients.Phone_Number, Clients.Email_Address, ValidCaseStatuses.Status_Name, Clients.Closure_Date, Clients.Comments " _
+        & "FROM (Clients LEFT JOIN ValidCities ON Clients.City_Name = ValidCities.ID) " _
+        & "LEFT JOIN ValidCaseStatuses ON Clients.VR_Case_Status = ValidCaseStatuses.ID "
+        
+    'Define the second part of the SQL query based on what column we're looking up clients by
+    Select Case lookupCriteria
+        Case "Participant ID"
+            qDef.SQL = qDef.SQL & "WHERE Clients.Participant_ID = [Param1];"
+        Case "First and Last Name"
+            qDef.SQL = qDef.SQL & "WHERE Clients.First_Name & ' ' & Clients.Last_Name = [Param1];"
+        Case "First Name"
+            qDef.SQL = qDef.SQL & "WHERE Clients.First_Name = [Param1];"
+        Case "Last Name"
+            qDef.SQL = qDef.SQL & "WHERE Clients.Last_Name = [Param1];"
+        Case "Address"
+            qDef.SQL = qDef.SQL & "WHERE Clients.Address LIKE '*' & [Param1] & '*';"
+        Case "Email Address"
+            qDef.SQL = qDef.SQL & "WHERE Clients.Email_Address LIKE '*' & [Param1] & '*';"
+        Case "Phone Number"
+            qDef.SQL = qDef.SQL & "WHERE Clients.Phone_Number = [Param1];"
+        Case Else
+            qDef.SQL = qDef.SQL & "WHERE Clients.Participant_ID = [Param1];"
+    End Select
+    
+    'Apply the supplied value to the parameter
+    qDef.Parameters("Param1").Value = lookupValue
+    
+    'Attempt to locate a record with the given parameters
+    Set records = qDef.OpenRecordset
+    
+    'Check to see if any records were found. If not, error message and exit.
+    If records.RecordCount = 0 Then
+        MsgBox "Error: No results were found."
+        LookupClient = False
+        Exit Function
+    End If
+    
+    'Check to see if more than one record was found. If so, error message and exit.
+    records.MoveLast
+    If records.RecordCount > 1 Then
+        MsgBox "Error: " & records.RecordCount & " records were found."
+        LookupClient = False
+        Exit Function
+    End If
+    
+    'Successful query. Close the Client Lookup form. Also close and reopen the Data Entry Navform to trigger the onLoad() event handler to populate the client information
+    Set GlobalVariables.currentClient = records
+    LookupClient = True
+    
+    If CurrentProject.AllForms("Client Lookup").IsLoaded Then
+        'If the Client Lookup form is open, close it because we successfully found a client
+        DoCmd.Close acForm, "Client Lookup", acSavePrompt
+    End If
+    
+    If CurrentProject.AllForms("Data Entry NavForm").IsLoaded And Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Client Subform" Then
+        'If the Data Entry Navform is open to the Client Subform, then populate the controls with information
+        Forms![Data Entry Navform].NavigationSubform.Form.PopulateInfo
+    Else
+        MsgBox "navform not loaded"
+    End If
+End Function
