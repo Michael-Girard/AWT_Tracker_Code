@@ -1,0 +1,125 @@
+Option Compare Database
+
+Public modifying As Boolean
+
+Private Sub btnPrevious_Click()
+    'Move to the previous record in the Disabilities Recordset
+    GlobalVariables.currentActivities.MovePrevious
+    
+    'Update the record number caption
+    Me.lblRecord.Caption = "Record " & GlobalVariables.currentActivities.AbsolutePosition + 1 & " of " & GlobalVariables.currentActivities.RecordCount
+        
+    'If this is the first record, make the previous button invisible
+    If GlobalVariables.currentActivities.AbsolutePosition = 0 Then
+        Me.cbActivityName.SetFocus
+        Me.btnPrevious.Visible = False
+    End If
+    
+    'Turn the next button visible
+    If GlobalVariables.currentActivities.AbsolutePosition + 1 < GlobalVariables.currentActivities.RecordCount Then
+        Me.btnNext.Visible = True
+    End If
+
+    PopulateInformation
+End Sub
+
+Private Sub btnNew_Click()
+    If modifying Then
+        modifying = False
+        Me.cbActivityName = ""
+        Me.tfActivityDate = ""
+    
+        'Set the disability selected to the end
+        GlobalVariables.currentActivities.Move GlobalVariables.currentActivities.RecordCount
+    
+        'Change visibility of the buttons
+        Me.cbActivityName.SetFocus
+        Me.btnPrevious.Visible = True
+        Me.btnNext.Visible = False
+    
+        'Update the record number caption
+        Me.lblRecord.Caption = "Record " & GlobalVariables.currentActivities.RecordCount + 1 & " of " & GlobalVariables.currentActivities.RecordCount + 1
+    End If
+End Sub
+
+Private Sub btnNext_Click()
+    'Move to the next record in the Disabilities Recordset
+    GlobalVariables.currentActivities.MoveNext
+    
+    'Update the record number caption
+    Me.lblRecord.Caption = "Record " & GlobalVariables.currentActivities.AbsolutePosition + 1 & " of " & GlobalVariables.currentActivities.RecordCount
+    
+    'If this is the last record, turn the next button invisible
+    If GlobalVariables.currentActivities.AbsolutePosition + 1 = GlobalVariables.currentActivities.RecordCount Then
+        Me.cbActivityName.SetFocus
+        Me.btnNext.Visible = False
+    End If
+            
+    'Make the Previous button visible
+    If GlobalVariables.currentActivities.AbsolutePosition > 0 Then
+        Me.btnPrevious.Visible = True
+    End If
+    
+    PopulateInformation
+End Sub
+
+Private Sub PopulateInformation()
+    modifying = True
+    Me.cbActivityName = GlobalVariables.currentActivities!Activity_Name
+    Me.tfActivityDate = GlobalVariables.currentActivities!Activity_Date
+End Sub
+
+Private Sub Form_Load()
+    'Declare and set variables for the client's name and participant ID
+    Dim staffName As String
+    Dim currentCaseID As Integer
+    staffName = GlobalVariables.currentStaffing!Staff_Name
+    currentCaseID = GlobalVariables.currentCases!ID
+    
+    'Set the client name and participant ID on the subform
+    Me.tfStaffName = staffName
+    Me.tfCaseNumber = currentCaseID
+    
+    'Declare variables to look up this client's disabilities
+    Dim database As DAO.database
+    Set database = CurrentDb()
+    Dim results As DAO.Recordset
+    Dim qDef As DAO.QueryDef
+    Set qDef = database.CreateQueryDef("")
+    
+    'Assign the SQL for the query
+    qDef.SQL = "SELECT Staff_Activities.ID, Staff_Activities.Activity_Date, ValidActivities.Activity_Name, Staff.Staff_Name " _
+        & "FROM ((Staff_Activities LEFT JOIN ValidActivities ON Staff_Activities.Activity_Name = ValidActivities.ID) " _
+        & "LEFT JOIN Staff ON Staff_Activities.Staff_Name = Staff.ID) " _
+        & "LEFT JOIN Cases ON Staff_Activities.Case_ID = Cases.ID " _
+        & "WHERE Cases.ID = [Param1] AND Staff.ID = [Param2];"
+    
+    qDef.Parameters("Param1").Value = currentCaseID
+    qDef.Parameters("Param2").Value = currentStaffing!staffID
+    
+    'Run the query
+    Set GlobalVariables.currentActivities = qDef.OpenRecordset
+    
+    Me.btnPrevious.Visible = False
+    If GlobalVariables.currentActivities.EOF Then
+        'If there are no disabilities recorded, leave fields blank and disable buttons to indicate no disabilities
+        modifying = False
+        Me.btnNext.Visible = False
+    Else
+        'If there are any disabilities recorded, display the first one
+        PopulateInformation
+        
+        'Check the number of records left
+        GlobalVariables.currentActivities.MoveLast
+        GlobalVariables.currentActivities.MoveFirst
+        
+        'Update the record number caption
+        Me.lblRecord.Caption = "Record " & GlobalVariables.currentActivities.AbsolutePosition + 1 & " of " & GlobalVariables.currentActivities.RecordCount
+        
+        'If this is the last record, turn the next button invisible
+        If GlobalVariables.currentActivities.AbsolutePosition + 1 = GlobalVariables.currentActivities.RecordCount Then
+            Me.cbActivityName.SetFocus
+            Me.btnNext.Visible = False
+        End If
+    End If
+End Sub
