@@ -1,0 +1,60 @@
+Option Compare Database
+
+Private Sub btnClientLookup_Click()
+    'Open the Client Lookup form as a dialog box
+    DoCmd.OpenForm "Client Lookup", acNormal, , , , acDialog
+End Sub
+
+
+Private Sub cbVRCaseStatus_Change()
+    'If the case is set as closed, reveal the date field, else hide it
+    If Me.cbVRCaseStatus = "Open" Then
+        Me.tfCaseClosedDate.Value = Null
+        Me.lblCaseClosedDate.Visible = False
+        Me.tfCaseClosedDate.Visible = False
+    Else
+        Me.lblCaseClosedDate.Visible = True
+        Me.tfCaseClosedDate.Visible = True
+    End If
+End Sub
+
+
+Private Sub Form_Load()
+    'If the form has received any OpenArgs from the Client Lookup
+    If Not GlobalVariables.currentClient Is Nothing Then
+        PopulateInfo
+    End If
+End Sub
+
+Public Sub ClearInfo()
+    'Clear all fields
+    Me.tfParticipantID = ""
+    Me.tfFirstName = ""
+    Me.tfLastName = ""
+    Me.tfAddress = ""
+    Me.tfEmail = ""
+    Me.cbCity = ""
+    Me.tfPhone = ""
+    Me.cbVRCaseStatus = ""
+    Me.tfCaseClosedDate = ""
+    Me.tfComments = ""
+    
+    Me.tfCaseClosedDate.Visible = False
+End Sub
+
+Public Sub PopulateInfo()
+    'Populate the fields with existing information
+    Me.tfParticipantID = GlobalVariables.currentClient!Participant_ID
+    Me.tfFirstName = GlobalVariables.currentClient!First_Name
+    Me.tfLastName = GlobalVariables.currentClient!Last_Name
+    Me.tfAddress = GlobalVariables.currentClient!address
+    Me.tfEmail = GlobalVariables.currentClient!Email_Address
+    Me.cbCity = GlobalVariables.currentClient!City_Name
+    Me.tfPhone = GlobalVariables.currentClient!Phone_Number
+    Me.cbVRCaseStatus = GlobalVariables.currentClient!Status_Name
+    Me.tfCaseClosedDate = GlobalVariables.currentClient!Closure_Date
+    Me.tfComments = GlobalVariables.currentClient!comments
+    
+    Me.tfCaseClosedDate.Visible = IIf(Me.cbVRCaseStatus.Value = "Open", False, True)
+End Sub
+
