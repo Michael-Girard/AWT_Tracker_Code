@@ -1,0 +1,753 @@
+Option Compare Database
+
+Public currentCaseID As Integer
+
+
+Private Sub btnBack_Click()
+    'If the back button is clicked, return to the previous tab. Unless you are on the first tab, then exit the form.
+    If Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Client Subform" Then
+        DoCmd.Close acForm, "Data Entry navform", acSavePrompt
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Disability Subform" Then
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Client Subform", "Data Entry Navform.NavigationSubform"
+        Me.btnBack.Caption = "Exit"
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Case Subform" Then
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Disability Subform", "Data Entry Navform.NavigationSubform"
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Equipment Subform" Then
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Case Subform", "Data Entry Navform.NavigationSubform"
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Staffing Subform" Then
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Equipment Subform", "Data Entry Navform.NavigationSubform"
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Activity Subform" Then
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Staffing Subform", "Data Entry Navform.NavigationSubform"
+    End If
+    
+End Sub
+
+
+Private Sub btnSave_Click()
+    'If the next button is clicked, move to the next tab. Unless you are on the last tab, then return to the first tab.
+    If Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Client Subform" Then
+        SaveClient
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Disability Subform" Then
+        SaveDisability
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Case Subform" Then
+        SaveCase
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Equipment Subform" Then
+        SaveEquipment
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Staffing Subform" Then
+        SaveStaffing
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Activity Subform" Then
+        SaveActivities
+    End If
+    
+
+End Sub
+
+Private Sub btnNext_Click()
+    'Set variables
+    Dim database As database
+    Dim subForm As Form
+    Dim querySql As String
+    Dim participantID As String
+    
+    If Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Client Subform" Then
+        'If the user did not use the client lookup form, we need to check that the Participant ID entered is valid
+        'Set variables for the database operations
+        Set database = CurrentDb()
+        Set subForm = Me.NavigationSubform.Form
+        If GlobalVariables.currentClient Is Nothing Then
+            If IsNull(subForm.tfParticipantID.Value) Or subForm.tfParticipantID.Value = "" Then
+                MsgBox "Error: You must enter a Participant ID to continue."
+                Exit Sub
+            Else
+                'Look up the client with the Participant ID. If nothing is found, an error is displayed.
+                If Not CustomFunctions.LookupClient(subForm.tfParticipantID.Value) Then
+                    Exit Sub
+                End If
+            End If
+        End If
+        
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Disability Subform", "Data Entry Navform.NavigationSubform"
+        Me.btnBack.Caption = "Back"
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Disability Subform" Then
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Case Subform", "Data Entry Navform.NavigationSubform"
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Case Subform" Then
+        'Check and make sure a valid case was selected before moving on
+        Set subForm = Me.NavigationSubform.Form
+        If GlobalVariables.currentCases.RecordCount = 0 Then
+            MsgBox "Error: To proceed, a case must exist for this client."
+            Exit Sub
+        ElseIf GlobalVariables.currentCases.AbsolutePosition = -1 Then
+            MsgBox "Error: The new record has not yet been saved. Please save the new record or hit the Previous Record button to cancel."
+            Exit Sub
+        End If
+        
+        'Find the row representing the current case's ID
+        currentCaseID = GlobalVariables.currentCases!ID
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Equipment Subform", "Data Entry Navform.NavigationSubform"
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Equipment Subform" Then
+        'Move on to the Staffing Subform
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Staffing Subform", "Data Entry Navform.NavigationSubform"
+        
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Staffing Subform" Then
+        'Move on to the Activity Subform
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Activity Subform", "Data Entry Navform.NavigationSubform"
+        
+    ElseIf Forms![Data Entry Navform].[NavigationSubform].SourceObject = "Data Entry Activity Subform" Then
+        'Go back to Clients subform and clear all information in the form and global variables
+        DoCmd.BrowseTo acBrowseToForm, "Data Entry Client Subform", "Data Entry Navform.NavigationSubform"
+        Me.NavigationSubform.Form.ClearInfo
+        ClearGlobalVariables
+        Me.btnBack.Caption = "Exit"
+    End If
+End Sub
+
+Private Sub SaveClient()
+    'Declare Variables
+    Dim database As DAO.database
+    Set database = CurrentDb()
+    Dim qDef As DAO.QueryDef
+    Set qDef = database.CreateQueryDef("")
+    
+    'Set reference to the NavigationSubform's active form for coding ease
+    Dim subForm As Form
+    Set subForm = Me.NavigationSubform.Form
+    
+    'Set variables for client information
+    Dim participantID As String
+    Dim firstName As String
+    Dim lastName As String
+    Dim address As String
+    Dim cityID As Integer
+    Dim phone As String
+    Dim email As String
+    Dim caseStatusID As Integer
+    Dim closureDate As String
+    Dim comments As String
+    
+    'First get information from the fields
+    participantID = subForm.tfParticipantID.Value
+    firstName = subForm.tfFirstName.Value
+    lastName = subForm.tfLastName.Value
+    address = subForm.tfAddress.Value
+    email = IIf(IsNull(subForm.tfEmail.Value), "", subForm.tfEmail.Value)
+    comments = IIf(IsNull(subForm.tfComments.Value), "", subForm.tfComments.Value)
+    
+    subForm.tfPhone.SetFocus
+    phone = subForm.tfPhone.Text
+    
+    'Get the ID of the city the client lives in
+    qDef.SQL = "SELECT ID FROM ValidCities WHERE City_Name = [Param1];"
+    
+    qDef.Parameters("Param1").Value = subForm.cbCity.Value
+    
+    cityID = qDef.OpenRecordset!ID
+    
+    'Get the ID of the VR_Case_Status in ValidCaseStatuses
+    qDef.SQL = "SELECT ID FROM ValidCaseStatuses WHERE Status_Name = [Param1];"
+    
+    qDef.Parameters("Param1").Value = subForm.cbVRCaseStatus.Value
+    
+    caseStatusID = qDef.OpenRecordset!ID
+    
+    'Set the Closure Date, if any
+    closureDate = IIf(IsNull(subForm.tfCaseClosedDate.Value) Or subForm.tfCaseClosedDate.Value = "", "", subForm.tfCaseClosedDate.Value)
+    
+    'Check if the client already exists
+    qDef.SQL = "SELECT * FROM Clients WHERE Participant_ID = [Param1];"
+    
+    qDef.Parameters("Param1").Value = subForm.tfParticipantID.Value
+    
+    If qDef.OpenRecordset.EOF Then
+        'Create the SQL INSERT query
+        qDef.SQL = "INSERT INTO Clients " _
+            & "(Participant_ID, First_Name, Last_Name, Address, City_Name, Phone_Number, Email_Address, VR_Case_Status, Closure_Date, Comments)" _
+            & " VALUES ([Param1], [Param2], [Param3], [Param4], [Param5], [Param6], [Param7], [Param8], [Param9], [Param10]);"
+        
+        qDef.Parameters("Param1").Value = participantID
+        qDef.Parameters("Param2").Value = firstName
+        qDef.Parameters("Param3").Value = lastName
+        qDef.Parameters("Param4").Value = address
+        qDef.Parameters("Param5").Value = cityID
+        qDef.Parameters("Param6").Value = phone
+        qDef.Parameters("Param7").Value = email
+        qDef.Parameters("Param8").Value = caseStatusID
+        qDef.Parameters("Param9").Value = closureDate
+        qDef.Parameters("Param10").Value = comments
+        
+        'Attempt to insert the client into the database
+        qDef.Execute dbFailOnError
+        MsgBox "Client Record Successfully Added"
+    Else
+        'Create the SQL UPDATE query
+        qDef.SQL = "Update Clients SET " _
+        & "First_Name = [Param2], " _
+        & "Last_Name = [Param3], " _
+        & "Address = [Param4], " _
+        & "City_Name = [Param5], " _
+        & "Phone_Number = [Param6], " _
+        & "Email_Address = [Param7], " _
+        & "VR_Case_Status = [Param8], " _
+        & "Closure_Date = [Param9], " _
+        & "Comments = [Param10] " _
+        & "WHERE Participant_ID = [Param11];"
+    
+        qDef.Parameters("Param2").Value = firstName
+        qDef.Parameters("Param3").Value = lastName
+        qDef.Parameters("Param4").Value = address
+        qDef.Parameters("Param5").Value = cityID
+        qDef.Parameters("Param6").Value = phone
+        qDef.Parameters("Param7").Value = email
+        qDef.Parameters("Param8").Value = caseStatusID
+        qDef.Parameters("Param9").Value = closureDate
+        qDef.Parameters("Param10").Value = comments
+        qDef.Parameters("Param11").Value = participantID
+        
+        'Attempt to update the client in the database
+        qDef.Execute dbFailOnError
+        MsgBox "Client Record Successfully Modified"
+    End If
+End Sub
+
+Private Sub SaveDisability()
+    'Declare Variables
+    Dim database As DAO.database
+    Set database = CurrentDb()
+    Dim qDef As DAO.QueryDef
+    Set qDef = database.CreateQueryDef("")
+    
+    'First check if data is being entered or modified
+    Dim subForm As Form
+    Set subForm = Me.NavigationSubform.Form
+    Dim modifying As Boolean
+    modifying = subForm.modifying
+    
+    Dim participantID As String
+    participantID = GlobalVariables.currentClient!Participant_ID
+    
+    If modifying Then
+        'Identify the ID of the row needing to be changed
+        Dim clientDisabilityID As String
+        clientDisabilityID = GlobalVariables.currentDisabilities!ID
+        
+        'Perform a query to see if the target disability already exists for that client
+        subForm.cbDisabilities.SetFocus
+        
+        qDef.SQL = "SELECT ValidDisabilities.Disability_Name " _
+           & "FROM (Client_Disabilities LEFT JOIN ValidDisabilities ON Client_Disabilities.Disability_Name = ValidDisabilities.ID) " _
+               & "LEFT JOIN Clients ON Client_Disabilities.Participant_ID = Clients.ID " _
+           & "WHERE Clients.Participant_ID = [Param1] AND " _
+               & "ValidDisabilities.Disability_Name = [Param2];"
+               
+        qDef.Parameters("Param1").Value = participantID
+        qDef.Parameters("Param2").Value = subForm.cbDisabilities.Text
+        
+        'Run the query
+        If Not qDef.OpenRecordset.RecordCount = 0 Then
+            'If there were no records found, throw an error
+            MsgBox "Error: That disability is already documented for that client."
+            Exit Sub
+        End If
+        
+        'First, identify the ID for the Client
+        Dim clientID As Integer
+        
+        qDef.SQL = "SELECT Clients.ID " _
+           & "FROM Clients " _
+           & "WHERE Clients.Participant_ID = [Param1];"
+           
+        qDef.Parameters("Param1").Value = participantID
+        
+        clientID = qDef.OpenRecordset!ID
+        
+        'Second, identify the ID for the disability we're replacing
+        Dim oldDisabilityID As Integer
+        qDef.SQL = "SELECT ValidDisabilities.ID " _
+           & "FROM ValidDisabilities " _
+           & "WHERE ValidDisabilities.Disability_Name = [Param1];"
+           
+        qDef.Parameters("Param1").Value = GlobalVariables.currentDisabilities!Disability_Name
+        
+        oldDisabilityID = qDef.OpenRecordset!ID
+        
+        'Third, identify the ID for the disability we're setting
+        Dim newDisabilityID As Integer
+        qDef.SQL = "SELECT ValidDisabilities.ID " _
+           & "FROM ValidDisabilities " _
+           & "WHERE ValidDisabilities.Disability_Name = [Param1];"
+           
+        qDef.Parameters("Param1").Value = subForm.cbDisabilities.Value
+        
+        newDisabilityID = qDef.OpenRecordset!ID
+        
+        'Finally, modify the value in the table
+        qDef.SQL = "UPDATE Client_Disabilities " _
+           & "SET Disability_Name = [Param1] " _
+           & "WHERE Participant_ID = [Param2] AND " _
+               & "Disability_Name = [Param3];"
+           
+        qDef.Parameters("Param1").Value = newDisabilityID
+        qDef.Parameters("Param2").Value = clientID
+        qDef.Parameters("Param3").Value = oldDisabilityID
+        
+        qDef.Execute dbFailOnError
+        MsgBox "Disability Successfully Modified"
+        
+        'Requery the database to get updated information, then move the position back to what it was previously
+        Dim currentIndex As Long
+        currentIndex = GlobalVariables.currentDisabilities.AbsolutePosition
+        GlobalVariables.currentDisabilities.Requery
+        GlobalVariables.currentDisabilities.MoveLast
+        GlobalVariables.currentDisabilities.AbsolutePosition = currentIndex
+        Exit Sub
+    Else
+        'Perform an insert query
+        qDef.SQL = "SELECT * FROM ((Client_Disabilities LEFT JOIN ValidDisabilities ON Client_Disabilities.Disability_Name = ValidDisabilities.ID) " _
+            & "LEFT JOIN Clients ON Clients.ID = Client_Disabilities.Participant_ID) " _
+            & "WHERE Clients.Participant_ID = [Param1] AND ValidDisabilities.Disability_Name = [Param2];"
+            
+        qDef.Parameters("Param1").Value = participantID
+        qDef.Parameters("Param2").Value = subForm.cbDisabilities.Text
+        
+        If Not qDef.OpenRecordset.EOF Then
+            'This client already had this disability in the database; throw an error
+            MsgBox "Error: The selected disability already exists for this client."
+            Exit Sub
+        End If
+        
+        'If this client did not have this disability already documented
+        qDef.SQL = "INSERT INTO Client_Disabilities (Participant_ID, Disability_Name) SELECT " _
+            & "Clients.ID as Participant_ID, " _
+            & "(SELECT ValidDisabilities.ID FROM ValidDisabilities WHERE ValidDisabilities.Disability_Name = [Param1]) as Disability_Name " _
+            & "FROM Clients WHERE Clients.Participant_ID = [Param2];"
+            
+        qDef.Parameters("Param1").Value = subForm.cbDisabilities.Value
+        qDef.Parameters("Param2").Value = participantID
+    
+        qDef.Execute dbFailOnError
+        MsgBox "Disability Successfully Added"
+        
+        'Requery the database to get updated information, then move to the last index to allow seamless traversal of the new information
+        GlobalVariables.currentDisabilities.Requery
+        GlobalVariables.currentDisabilities.MoveLast
+        subForm.modifying = True
+        subForm.lblRecord.Caption = "Record " & GlobalVariables.currentDisabilities.AbsolutePosition + 1 & " of " & GlobalVariables.currentDisabilities.RecordCount
+    End If
+End Sub
+Private Sub SaveCase()
+    'Declare Variables
+    Dim database As DAO.database
+    Set database = CurrentDb()
+    Dim qDef As DAO.QueryDef
+    Set qDef = database.CreateQueryDef("")
+    
+    'First check if data is being entered or modified
+    Dim subForm As Form
+    Set subForm = Me.NavigationSubform.Form
+    Dim modifying As Boolean
+    modifying = subForm.modifying
+    
+    'Get the client's participant ID
+ 
+    'Validate that the necessary fields are filled in
+    If IsNull(subForm.cbOfficeName.Value) Or subForm.cbOfficeName.Value = "" Then
+        MsgBox "Error: You must select an office the case was referred from"
+        Exit Sub
+    End If
+    If IsNull(subForm.cbReferrer.Value) Or subForm.cbReferrer.Value = "" Then
+        MsgBox "Error: You must select a staff member the case was referred from."
+        Exit Sub
+    End If
+    If IsNull(subForm.cbClientStatus.Value) Or subForm.cbClientStatus.Value = "" Then
+        MsgBox "Error: You must select a Client Status."
+        Exit Sub
+    End If
+    If IsNull(subForm.tfReceivedDate.Value) Or subForm.tfReceivedDate.Value = "" Then
+        MsgBox "Error: You must enter the date the referral was received."
+        Exit Sub
+    End If
+        
+    'Declaring variables for the queries
+    Dim officeID As Integer
+    Dim staffID As Integer
+    Dim participantID As String
+    Dim clientStatusID As Integer
+    Dim staffPositionID As Variant
+    Dim caseStatus As Boolean
+    Dim referralReceivedDate As String
+    Dim positionAssignedDate As String
+    Dim appointmentGivenDate As String
+    Dim assessmentDate As String
+    Dim reportUploadedDate As String
+    Dim equipmentArrivedDate As String
+    Dim equipmentDeliveredDate As String
+    Dim caseComments As String
+    
+    'First, get IDs for lookup fields
+    participantID = GlobalVariables.currentClient!ID
+    
+    'OfficeID
+    qDef.SQL = "SELECT ID FROM Offices WHERE Office_Name = [Param1];"
+    qDef.Parameters("Param1").Value = subForm.cbOfficeName.Value
+    officeID = qDef.OpenRecordset!ID
+    
+    'StaffID
+    qDef.SQL = "SELECT ID FROM Staff WHERE Staff_Name = [Param1];"
+    qDef.Parameters("Param1").Value = subForm.cbReferrer.Value
+    staffID = qDef.OpenRecordset!ID
+    
+    'StaffPositionID
+    If IsNull(subForm.cbPositionAssigned.Value) Or subForm.cbPositionAssigned.Value = "" Then
+        staffPositionID = ""
+    Else
+        qDef.SQL = "SELECT ID FROM ValidStaffPositions WHERE Position_Name = [Param1];"
+        qDef.Parameters("Param1").Value = subForm.cbPositionAssigned.Value
+        staffPositionID = qDef.OpenRecordset!ID
+    End If
+    
+    'ClientStatusID
+    qDef.SQL = "SELECT ID FROM ValidClientStatuses WHERE Status_Name = [Param1];"
+    qDef.Parameters("Param1").Value = subForm.cbClientStatus.Value
+    clientStatusID = qDef.OpenRecordset!ID
+    
+    'Second, get information from the form fields
+    caseStatus = IIf(subForm.chklblCaseClosed.Caption = "o", False, True)
+    referralReceivedDate = IIf(IsNull(subForm.tfReceivedDate.Value) Or subForm.tfReceivedDate.Value = "", "", subForm.tfReceivedDate.Value)
+    positionAssignedDate = IIf(IsNull(subForm.tfPositionAssignedDate.Value) Or subForm.tfPositionAssignedDate.Value = "", "", subForm.tfPositionAssignedDate.Value)
+    appointmentGivenDate = IIf(IsNull(subForm.tfAppointmentGiven.Value) Or subForm.tfAppointmentGiven.Value = "", "", subForm.tfAppointmentGiven.Value)
+    assessmentDate = IIf(IsNull(subForm.tfAssessmentDate.Value) Or subForm.tfAssessmentDate.Value = "", "", subForm.tfAssessmentDate.Value)
+    reportUploadedDate = IIf(IsNull(subForm.tfReportUploaded.Value) Or subForm.tfReportUploaded.Value = "", "", subForm.tfReportUploaded.Value)
+    equipmentArrivedDate = IIf(IsNull(subForm.tfEquipmentArrival.Value) Or subForm.tfEquipmentArrival.Value = "", "", subForm.tfEquipmentArrival.Value)
+    equipmentDeliveredDate = IIf(IsNull(subForm.tfEquipmentDelivery.Value) Or subForm.tfEquipmentDelivery.Value = "", "", subForm.tfEquipmentDelivery.Value)
+    caseComments = IIf(IsNull(subForm.tfCaseComments.Value), "", subForm.tfCaseComments.Value)
+        
+    If modifying Then
+        'Identify the ID of the row needing to be changed
+        qDef.SQL = "UPDATE Cases " _
+            & "SET Cases.Office_Name = [Param1], " _
+                & "Cases.Referring_Staff_Name = [Param2], " _
+                & "Cases.Client_Status = [Param3], " _
+                & "Cases.Case_Closed = [Param4], " _
+                & "Cases.Referral_Received_Date = [Param5], " _
+                & "Cases.Position_Assigned = [Param6], " _
+                & "Cases.Position_Assigned_Date = [Param7], " _
+                & "Cases.Appointment_Given_Date = [Param8], " _
+                & "Cases.Assessment_Date = [Param9], " _
+                & "Cases.Report_Upload_Date = [Param10], " _
+                & "Cases.Equipment_Arrival_Date = [Param11], " _
+                & "Cases.Equipment_Delivery_Date = [Param12], " _
+                & "Cases.Comments = [Param13] " _
+            & "WHERE Cases.ID = [Param14];"
+            
+        qDef.Parameters("Param1").Value = officeID
+        qDef.Parameters("Param2").Value = staffID
+        qDef.Parameters("Param3").Value = clientStatusID
+        qDef.Parameters("Param4").Value = caseStatus
+        qDef.Parameters("Param5").Value = referralReceivedDate
+        qDef.Parameters("Param6").Value = staffPositionID
+        qDef.Parameters("Param7").Value = positionAssignedDate
+        qDef.Parameters("Param8").Value = appointmentGivenDate
+        qDef.Parameters("Param9").Value = assessmentDate
+        qDef.Parameters("Param10").Value = reportUploadedDate
+        qDef.Parameters("Param11").Value = equipmentArrivedDate
+        qDef.Parameters("Param12").Value = equipmentDeliveredDate
+        qDef.Parameters("Param13").Value = caseComments
+        qDef.Parameters("Param14").Value = GlobalVariables.currentCases!ID
+        
+
+        qDef.Execute dbFailOnError
+        MsgBox "Case successfully modified."
+        
+        'Requery the database to get updated information, then move the position back to what it was previously
+        Dim currentIndex As Long
+        currentIndex = GlobalVariables.currentCases.AbsolutePosition
+        GlobalVariables.currentCases.Requery
+        GlobalVariables.currentCases.MoveLast
+        GlobalVariables.currentCases.AbsolutePosition = currentIndex
+    Else
+        qDef.SQL = "INSERT INTO Cases " _
+               & "(Office_Name, Referring_Staff_Name, Participant_ID, Client_Status, Position_Assigned, Case_Closed, " _
+               & "Referral_Received_Date, Position_Assigned_Date, Appointment_Given_Date, Assessment_Date, " _
+               & "Report_Upload_Date, Equipment_Arrival_Date, Equipment_Delivery_Date, Comments) " _
+           & "Values ([Param1], [Param2], [Param3], [Param4], [Param5], [Param6], [Param7], [Param8], [Param9], [Param10], " _
+                & "[Param11], [Param12], [Param13], [Param14]);"
+                
+        qDef.Parameters("Param1").Value = officeID
+        qDef.Parameters("Param2").Value = staffID
+        qDef.Parameters("Param3").Value = participantID
+        qDef.Parameters("Param4").Value = clientStatusID
+        qDef.Parameters("Param5").Value = staffPositionID
+        qDef.Parameters("Param6").Value = caseStatus
+        qDef.Parameters("Param7").Value = referralReceivedDate
+        qDef.Parameters("Param8").Value = positionAssignedDate
+        qDef.Parameters("Param9").Value = appointmentGivenDate
+        qDef.Parameters("Param10").Value = assessmentDate
+        qDef.Parameters("Param11").Value = reportUploadedDate
+        qDef.Parameters("Param12").Value = equipmentArrivedDate
+        qDef.Parameters("Param13").Value = equipmentDeliveredDate
+        qDef.Parameters("Param14").Value = caseComments
+
+        'Attempt to add the case to the database
+        qDef.Execute dbFailOnError
+        MsgBox "Case successfully added."
+        
+        'Requery the database to get updated information, then move to the last index to allow seamless traversal of the new information
+        GlobalVariables.currentCases.Requery
+        GlobalVariables.currentCases.MoveLast
+        subForm.modifying = True
+        subForm.lblRecord.Caption = "Record " & GlobalVariables.currentCases.AbsolutePosition + 1 & " of " & GlobalVariables.currentCases.RecordCount
+    End If
+End Sub
+
+Private Sub SaveEquipment()
+    'Declare Variables
+    Dim database As DAO.database
+    Set database = CurrentDb()
+    Dim qDef As DAO.QueryDef
+    Set qDef = database.CreateQueryDef("")
+    Set subForm = Me.NavigationSubform.Form
+    
+    'Ensure all the required information is included
+    If IsNull(subForm.cbEquipmentType.Value) Or subForm.cbEquipmentType.Value = "" Then
+        MsgBox "Error: You must choose an equipment type."
+        Exit Sub
+    End If
+    
+    If IsNull(subForm.tfCost.Value) Or subForm.tfCost.Value = "" Then
+        MsgBox "Error: You must enter a price for the equipment item."
+        Exit Sub
+    End If
+    
+    'Identify the information for the new equipment
+    Dim newEquipmentTypeID As Integer
+    Dim equipmentCost As Long
+    Dim equipmentPurchased As Boolean
+    
+    qDef.SQL = "SELECT ValidEquipment.ID " _
+       & "FROM ValidEquipment " _
+       & "WHERE Equipment_Type = [Param1];"
+    qDef.Parameters("Param1").Value = subForm.cbEquipmentType.Value
+    newEquipmentTypeID = qDef.OpenRecordset!ID
+    
+    
+    equipmentCost = CLng(subForm.tfCost.Value)
+    equipmentPurchased = IIf(subForm.chklblPurchased.Caption = "o", False, True)
+    
+    'First check if data is being entered or modified
+    Dim modifying As Boolean
+    modifying = subForm.modifying
+        
+    If modifying Then
+        'Modify the value in the table
+        Dim equipmentRowID As Integer
+        equipmentRowID = GlobalVariables.currentEquipment!ID
+        
+        qDef.SQL = "UPDATE Equipment " _
+           & "SET Equipment_Type = [Param1], " _
+           & "Equipment_Cost = [Param2], " _
+           & "Purchased = [Param3] " _
+           & "WHERE ID = [Param4];"
+           
+        qDef.Parameters("Param1").Value = newEquipmentTypeID
+        qDef.Parameters("Param2").Value = equipmentCost
+        qDef.Parameters("Param3").Value = equipmentPurchased
+        qDef.Parameters("Param4").Value = equipmentRowID
+           
+        qDef.Execute dbFailOnError
+        MsgBox "Equipment Successfully Modified"
+        
+        'Requery the database to get updated information, then move the position back to what it was previously
+        Dim currentIndex As Long
+        currentIndex = GlobalVariables.currentEquipment.AbsolutePosition
+        GlobalVariables.currentEquipment.Requery
+        GlobalVariables.currentEquipment.MoveLast
+        GlobalVariables.currentEquipment.AbsolutePosition = currentIndex
+    Else
+        'Perform an insert query
+        qDef.SQL = "INSERT INTO Equipment (Case_ID, Equipment_Type, Equipment_Cost, Purchased) " _
+            & "VALUES ([Param1], [Param2], [Param3], [Param4]);"
+            
+        qDef.Parameters("Param1").Value = currentCaseID
+        qDef.Parameters("Param2").Value = newEquipmentTypeID
+        qDef.Parameters("Param3").Value = equipmentCost
+        qDef.Parameters("Param4").Value = equipmentPurchased
+            
+        qDef.Execute dbFailOnError
+        MsgBox "Equipment Successfully Added"
+        
+        'Requery the database to get updated information, then move to the last index to allow seamless traversal of the new information
+        GlobalVariables.currentEquipment.Requery
+        GlobalVariables.currentEquipment.MoveLast
+        subForm.modifying = True
+        subForm.lblRecord.Caption = "Record " & GlobalVariables.currentEquipment.AbsolutePosition + 1 & " of " & GlobalVariables.currentEquipment.RecordCount
+    End If
+End Sub
+
+Private Sub SaveStaffing()
+    'Declare Variables
+    Dim database As DAO.database
+    Set database = CurrentDb()
+    Dim qDef As DAO.QueryDef
+    Set qDef = database.CreateQueryDef("")
+    Set subForm = Me.NavigationSubform.Form
+    
+    'Ensure that a staff name is provided
+    If IsNull(subForm.cbStaffName.Value) Or subForm.cbStaffName.Value = "" Then
+        MsgBox "Error: You must choose a staff member."
+        Exit Sub
+    End If
+    
+    'Identify the ID for the new staff
+    Dim newStaffingID As Integer
+    
+    qDef.SQL = "SELECT Staff.ID " _
+       & "FROM Staff " _
+       & "WHERE Staff_Name = [Param1];"
+    
+    qDef.Parameters("Param1").Value = subForm.cbStaffName.Value
+        
+    newStaffingID = qDef.OpenRecordset!ID
+    
+    'Perform a query to see if the staff member is already part of this case
+    qDef.SQL = "SELECT * " _
+       & "FROM Case_Assignments " _
+       & "WHERE Case_Assignments.Staff_Name = [Param1] AND " _
+           & "Case_Assignments.Case_ID = [Param2];"
+    
+    qDef.Parameters("Param1").Value = newStaffingID
+    qDef.Parameters("Param2").Value = currentCaseID
+    
+    'Run the query
+    If qDef.OpenRecordset.RecordCount = 0 Then
+        'First check if data is being entered or modified
+        Dim modifying As Boolean
+        modifying = subForm.modifying
+            
+        If modifying Then
+            'Modify the value in the table
+            Dim staffingRowID As Integer
+            staffingRowID = GlobalVariables.currentStaffing!ID
+            
+            qDef.SQL = "UPDATE Case_Assignments " _
+               & "SET Staff_Name = [Param1] " _
+               & "WHERE ID = [Param2];"
+               
+            qDef.Parameters("Param1").Value = newStaffingID
+            qDef.Parameters("Param2").Value = staffingRowID
+            
+            qDef.Execute dbFailOnError
+            MsgBox "Staff Successfully Modified"
+            
+            'Requery the database to get updated information, then move the position back to what it was previously
+            Dim currentIndex As Long
+            currentIndex = GlobalVariables.currentStaffing.AbsolutePosition
+            GlobalVariables.currentStaffing.Requery
+            GlobalVariables.currentStaffing.MoveLast
+            GlobalVariables.currentStaffing.AbsolutePosition = currentIndex
+        Else
+            'Perform an insert query
+            qDef.SQL = "INSERT INTO Case_Assignments (Case_ID, Staff_Name) " _
+                & "VALUES ([Param1], [Param2]);"
+            
+            qDef.Parameters("Param1").Value = currentCaseID
+            qDef.Parameters("Param2").Value = newStaffingID
+            
+            qDef.Execute dbFailOnError
+            MsgBox "Staff Successfully Added To Case"
+            
+            'Requery the database to get updated information, then move to the last index to allow seamless traversal of the new information
+            GlobalVariables.currentStaffing.Requery
+            GlobalVariables.currentStaffing.MoveLast
+            subForm.modifying = True
+            subForm.lblRecord.Caption = "Record " & GlobalVariables.currentStaffing.AbsolutePosition + 1 & " of " & GlobalVariables.currentStaffing.RecordCount
+        End If
+    Else
+        MsgBox "Error: That staff member is already staffed to this case."
+    End If
+End Sub
+
+Private Sub SaveActivities()
+    'Set a SubForm reference for easier coding
+    Dim subForm As Form
+    Set subForm = Me.NavigationSubform.Form
+    
+    'Check if required information has been supplied
+    If IsNull(subForm.cbActivityName.Value) Then
+        MsgBox "Error: You must choose an activity name."
+        Exit Sub
+    End If
+    
+    subForm.tfActivityDate.SetFocus
+    If IsNull(subForm.tfActivityDate.Text) Or subForm.tfActivityDate.Text = "" Then
+        MsgBox "Error: You must enter the date the activity was performed."
+        Exit Sub
+    End If
+    
+    'Declare and set variables
+    Dim database As DAO.database
+    Dim qDef As DAO.QueryDef
+    Dim caseID As Integer
+    Dim staffID As Integer
+    Dim newActivityID As Integer
+    Dim newDate As String
+    Set database = CurrentDb()
+    Set qDef = database.CreateQueryDef("")
+    newDate = subForm.tfActivityDate.Text
+    caseID = GlobalVariables.currentCases!ID
+    staffID = GlobalVariables.currentStaffing!staffID
+    
+    'Get activity ID
+    qDef.SQL = "SELECT ID FROM ValidActivities WHERE ValidActivities.Activity_Name = [Param1];"
+    subForm.cbActivityName.SetFocus
+    qDef.Parameters("Param1") = subForm.cbActivityName.Value
+    newActivityID = qDef.OpenRecordset!ID
+    
+    If subForm.modifying Then
+        'Perform modifications to currently selected activity
+        qDef.SQL = "UPDATE Staff_Activities SET " _
+            & "Case_ID = [Param1], " _
+            & "Staff_Name = [Param2], " _
+            & "Activity_Name = [Param3], " _
+            & "Activity_Date = [Param4] " _
+            & "WHERE Staff_Activities.ID = [Param5];"
+        qDef.Parameters("Param1") = caseID
+        qDef.Parameters("Param2") = staffID
+        qDef.Parameters("Param3") = newActivityID
+        qDef.Parameters("Param4") = newDate
+        qDef.Parameters("Param5") = GlobalVariables.currentActivities!ID
+        
+        qDef.Execute dbFailOnError
+        MsgBox "Activity successfully modified."
+        'Requery the database to get updated information, then move the position back to what it was previously
+        Dim currentIndex As Long
+        currentIndex = GlobalVariables.currentActivities.AbsolutePosition
+        GlobalVariables.currentActivities.Requery
+        GlobalVariables.currentActivities.MoveLast
+        GlobalVariables.currentActivities.AbsolutePosition = currentIndex
+    Else
+        'Insert new activity
+        qDef.SQL = "INSERT INTO Staff_Activities (Case_ID, Staff_Name, Activity_Name, Activity_Date) " _
+            & "VALUES ([Param1], [Param2], [Param3], [Param4]);"
+        qDef.Parameters("Param1") = caseID
+        qDef.Parameters("Param2") = staffID
+        qDef.Parameters("Param3") = newActivityID
+        qDef.Parameters("Param4") = newDate
+        
+        qDef.Execute dbFailOnError
+        MsgBox "Activity successfully added."
+        'Requery the database to get updated information, then move to the last index to allow seamless traversal of the new information
+        GlobalVariables.currentActivities.Requery
+        GlobalVariables.currentActivities.MoveLast
+        subForm.modifying = True
+        subForm.lblRecord.Caption = "Record " & GlobalVariables.currentActivities.AbsolutePosition + 1 & " of " & GlobalVariables.currentActivities.RecordCount
+    End If
+End Sub
+
+Private Sub Form_Close()
+    ClearGlobalVariables
+End Sub
+
+Private Sub ClearGlobalVariables()
+    Set GlobalVariables.currentClient = Nothing
+    Set GlobalVariables.currentDisabilities = Nothing
+    Set GlobalVariables.currentCases = Nothing
+End Sub
