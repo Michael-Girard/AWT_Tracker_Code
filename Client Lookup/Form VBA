@@ -1,0 +1,58 @@
+Option Compare Database
+
+Private Sub btnSubmit_Click()
+    
+    'Focus the LookupValue field to get its content, then call the Custom Function
+    Me.tfLookupValue.SetFocus
+    CustomFunctions.LookupClient Me.tfLookupValue.Value, Me.cbLookupType.Value
+    
+End Sub
+
+Private Sub cbLookupType_Change()
+    Dim lookupType As String
+    Me.cbLookupType.SetFocus
+    lookupType = Me.cbLookupType.Value
+    
+    Me.tfLookupValue.SetFocus
+    Me.tfLookupValue.Value = Null
+    If lookupType = "Phone Number" Then
+        Me.tfLookupValue.InputMask = "(###) ###-####"
+    Else
+        Me.tfLookupValue.InputMask = ""
+    End If
+    
+End Sub
+
+Private Sub cbLookupType_KeyDown(KeyCode As Integer, Shift As Integer)
+    Select Case KeyCode
+        Case vbKeyReturn, vbKeyTab, vbKeyUp, vbKeyDown
+            KeyCode = KeyCode  'Accept these keys
+        Case Else
+            KeyCode = 0 'Block all other keys
+    End Select
+End Sub
+
+Private Sub cbLookupType_Change()
+    'If the LookupType is changed to a phone number, apply an input mask to the field
+    Dim lookupType As String
+    Me.cbLookupType.SetFocus
+    lookupType = Me.cbLookupType.Value
+    
+    Me.tfLookupValue.SetFocus
+    Me.tfLookupValue.Value = Null
+    If lookupType = "Phone Number" Then
+        Me.tfLookupValue.InputMask = "(###) ###-####"
+    Else
+        Me.tfLookupValue.InputMask = ""
+    End If
+End Sub
+
+Private Sub cbLookupType_KeyDown(KeyCode As Integer, Shift As Integer)
+    'Block all input except for a few keys
+    Select Case KeyCode
+        Case vbKeyReturn, vbKeyTab, vbKeyUp, vbKeyDown
+            KeyCode = KeyCode  'Accept these keys
+        Case Else
+            KeyCode = 0 'Block all other keys
+    End Select
+End Sub
