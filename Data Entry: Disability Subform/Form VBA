@@ -1,0 +1,123 @@
+Option Compare Database
+
+Public modifying As Boolean
+
+Private Sub btnPreviousDisability_Click()
+    modifying = True
+    
+    'Move to the previous record in the Disabilities Recordset
+    GlobalVariables.currentDisabilities.MovePrevious
+    
+    'Update the record number caption
+    Me.lblRecord.Caption = "Record " & GlobalVariables.currentDisabilities.AbsolutePosition + 1 & " of " & GlobalVariables.currentDisabilities.RecordCount
+        
+    'If this is the first record, make the previous button invisible
+    If GlobalVariables.currentDisabilities.AbsolutePosition = 0 Then
+        Me.cbDisabilities.SetFocus
+        Me.btnPreviousDisability.Visible = False
+    End If
+    
+    'Turn the next button visible
+    If GlobalVariables.currentDisabilities.AbsolutePosition + 1 < GlobalVariables.currentDisabilities.RecordCount Then
+        Me.btnNextDisability.Visible = True
+    End If
+
+    Me.cbDisabilities = GlobalVariables.currentDisabilities!Disability_Name
+End Sub
+
+Private Sub btnNewDisability_Click()
+    If modifying Then
+        modifying = False
+        Me.cbDisabilities = ""
+    
+        'Set the disability selected to the end
+        GlobalVariables.currentDisabilities.Move GlobalVariables.currentDisabilities.RecordCount
+    
+        'Change visibility of the buttons
+        Me.cbDisabilities.SetFocus
+        Me.btnPreviousDisability.Visible = True
+        Me.btnNextDisability.Visible = False
+    
+        'Update the record number caption
+        Me.lblRecord.Caption = "Record " & GlobalVariables.currentDisabilities.RecordCount + 1 & " of " & GlobalVariables.currentDisabilities.RecordCount + 1
+    End If
+End Sub
+
+Private Sub btnNextDisability_Click()
+    modifying = True
+    'Move to the next record in the Disabilities Recordset
+    GlobalVariables.currentDisabilities.MoveNext
+    
+    'Update the record number caption
+    Me.lblRecord.Caption = "Record " & GlobalVariables.currentDisabilities.AbsolutePosition + 1 & " of " & GlobalVariables.currentDisabilities.RecordCount
+    
+    'If this is the last record, turn the next button invisible
+    If GlobalVariables.currentDisabilities.AbsolutePosition + 1 = GlobalVariables.currentDisabilities.RecordCount Then
+        Me.cbDisabilities.SetFocus
+        Me.btnNextDisability.Visible = False
+    End If
+            
+    'Make the Previous button visible
+    If GlobalVariables.currentDisabilities.AbsolutePosition > 0 Then
+        Me.btnPreviousDisability.Visible = True
+    End If
+    
+    Me.cbDisabilities = GlobalVariables.currentDisabilities!Disability_Name
+End Sub
+
+
+
+Private Sub Form_Load()
+    'Declare and set variables for the client's name and participant ID
+    Dim clientName As String
+    Dim participantID As String
+    clientName = GlobalVariables.currentClient!First_Name & " " & GlobalVariables.currentClient!Last_Name
+    participantID = GlobalVariables.currentClient!Participant_ID
+    
+    'Set the client name and participant ID on the subform
+    Me.tfClientName = clientName
+    Me.tfParticipantID = participantID
+    
+    'Declare variables to look up this client's disabilities
+    Dim database As DAO.database
+    Set database = CurrentDb()
+    Dim results As DAO.Recordset
+    Dim qDef As DAO.QueryDef
+    Set qDef = database.CreateQueryDef("")
+    
+    'Assign the SQL for the query
+    qDef.SQL = "SELECT Client_Disabilities.ID, Clients.Participant_ID, ValidDisabilities.Disability_Name " _
+        & "FROM ((Client_Disabilities LEFT JOIN Clients ON Client_Disabilities.Participant_ID = Clients.ID) LEFT JOIN " _
+        & "ValidDisabilities ON Client_Disabilities.Disability_Name = ValidDisabilities.ID) WHERE Clients.Participant_ID = [Param1];"
+    
+    qDef.Parameters("Param1").Value = participantID
+    
+    'Run the query
+    Set GlobalVariables.currentDisabilities = qDef.OpenRecordset
+    
+    Me.btnPreviousDisability.Visible = False
+    If GlobalVariables.currentDisabilities.EOF Then
+        'If there are no disabilities recorded, leave fields blank and disable buttons to indicate no disabilities
+        modifying = False
+        Me.btnNextDisability.Visible = False
+    Else
+        'If there are any disabilities recorded, display the first one
+        modifying = True
+        Me.cbDisabilities = GlobalVariables.currentDisabilities!Disability_Name
+        
+        'Check the number of records left
+        GlobalVariables.currentDisabilities.MoveLast
+        GlobalVariables.currentDisabilities.MoveFirst
+        
+        'Update the record number caption
+        Me.lblRecord.Caption = "Record " & GlobalVariables.currentDisabilities.AbsolutePosition + 1 & " of " & GlobalVariables.currentDisabilities.RecordCount
+        
+        'If this is the last record, turn the next button invisible
+        If GlobalVariables.currentDisabilities.AbsolutePosition + 1 = GlobalVariables.currentDisabilities.RecordCount Then
+            Me.cbDisabilities.SetFocus
+            Me.btnNextDisability.Visible = False
+        End If
+    End If
+End Sub
+
+
